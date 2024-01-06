@@ -81,8 +81,8 @@ void midi_callback(MidiEvent evt)
                 OscData data;
                 data.top = Clock::now();
                 data.osc.Init(samplerate);
-                bool is_inserted = false;
 
+                bool is_inserted = false;
                 std::tie(iter_osc_data, is_inserted)
                     = note_to_osc_datas.emplace(pp.note, data);
                 assert(is_inserted);
@@ -106,6 +106,12 @@ void midi_callback(MidiEvent evt)
                 iter_osc_data = note_to_osc_datas.erase(iter_osc_data);
 
             hw.led2.Set(0, 0, 0);
+        }
+        break;
+        case MidiMessageType::ChannelMode:
+        {
+            // const AllNotesOffEvent pp = evt.AsAllNotesOff();
+            note_to_osc_datas.clear();
         }
         break;
         default: break;
@@ -144,5 +150,7 @@ int main(void)
         const auto green = dur.count() - std::floor(dur.count());
         hw.led1.Set(red, green, count_midi_clocks % 2 == 0 ? 0 : 1);
         hw.UpdateLeds();
+
+        System::Delay(1);
     }
 }
