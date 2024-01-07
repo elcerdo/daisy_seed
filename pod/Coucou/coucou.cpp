@@ -1,10 +1,12 @@
 #include "daisy_pod.h"
 #include "daisysp.h"
+#include "fft.h"
 
 #include <array>
 #include <random>
 #include <chrono>
 #include <map>
+#include <vector>
 
 using namespace daisy;
 using namespace daisysp;
@@ -22,7 +24,7 @@ struct OscData
 using NoteToOscDatas = std::map<uint8_t, OscData>;
 
 DaisyPod       hw;
-Parameter      knob_color;
+Parameter      knob_volume;
 Parameter      knob_waveform;
 NoteToOscDatas note_to_osc_datas;
 
@@ -34,6 +36,16 @@ void audio_callback(AudioHandle::InterleavingInputBuffer  in,
                     AudioHandle::InterleavingOutputBuffer out,
                     size_t                                size)
 {
+    using Patate = std::vector<std::complex<double>>;
+
+    Patate foo;
+    foo.reserve(size / 2);
+    for(size_t ii = 0; ii < size; ii += 2)
+        foo.emplace_back(in[ii]);
+
+    coucou::fast_fourier(foo.data(), foo.size());
+
+
     hw.ProcessAllControls();
 
     auto waveform = std::floor(knob_waveform.Process());
@@ -42,11 +54,13 @@ void audio_callback(AudioHandle::InterleavingInputBuffer  in,
     for(auto& [note, data] : note_to_osc_datas)
         data.osc.SetWaveform(waveform);
 
+    const auto master_volume = knob_volume.Process();
     for(size_t ii = 0; ii < size; ii += 2)
     {
         float ss = 0;
         for(auto& [note, data] : note_to_osc_datas)
             ss += data.osc.Process();
+        ss *= master_volume;
         out[ii]     = in[ii] + ss;
         out[ii + 1] = in[ii + 1] + ss;
     }
@@ -54,6 +68,8 @@ void audio_callback(AudioHandle::InterleavingInputBuffer  in,
 
 void midi_callback(MidiEvent evt)
 {
+    // hw.seed.PrintLine("[midi_callback]");
+
     switch(evt.type)
     {
         case MidiMessageType::SystemRealTime:
@@ -93,7 +109,8 @@ void midi_callback(MidiEvent evt)
             // osc.Reset();
             // osc.SetAmp(0.0);
             osc.SetFreq(mtof(pp.note));
-            osc.SetAmp(1);
+            osc.SetAmp(1); // pp.velocity
+            // osc.SetAmp(std::max(pp.velocity, .1f));
             hw.led2.Set(dist_color(rng), dist_color(rng), dist_color(rng));
         }
         break;
@@ -121,12 +138,15 @@ void midi_callback(MidiEvent evt)
 int main(void)
 {
     hw.Init();
-    hw.SetAudioBlockSize(4); // number of samples handled per callback
+    hw.SetAudioBlockSize(256); // number of samples handled per callback
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
     hw.seed.usb_handle.Init(UsbHandle::FS_INTERNAL);
     System::Delay(250);
 
-    knob_color.Init(hw.knob1, 0, 1, Parameter::LINEAR);
+    // hw.seed.StartLog(true);
+    // hw.seed.PrintLine("coucou");
+
+    knob_volume.Init(hw.knob1, 0, 1, Parameter::LINEAR);
     knob_waveform.Init(hw.knob2, 0, 8, Parameter::LINEAR);
 
     rng               = Rng(0x12ab45cd);
@@ -146,11 +166,11 @@ int main(void)
 
         const std::chrono::duration<float> dur = (Clock::now() - top_start);
 
-        const auto red   = knob_color.Process();
         const auto green = dur.count() - std::floor(dur.count());
-        hw.led1.Set(red, green, count_midi_clocks % 2 == 0 ? 0 : 1);
+        hw.led1.Set(0, green, count_midi_clocks % 24 == 0 ? 1 : 0);
         hw.UpdateLeds();
 
-        System::Delay(1);
+        if(hw.button1.Pressed())
+            note_to_osc_datas.clear();
     }
 }

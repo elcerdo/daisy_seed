@@ -2,7 +2,7 @@
 TARGET = coucou
 
 # Sources
-CPP_SOURCES = coucou.cpp
+CPP_SOURCES = coucou.cpp fft.cpp
 
 # Library Locations
 LIBDAISY_DIR = ../../libDaisy
