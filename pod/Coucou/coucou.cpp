@@ -32,20 +32,10 @@ Rng       rng;
 DistColor dist_color;
 size_t    count_midi_clocks;
 
-void audio_callback(AudioHandle::InterleavingInputBuffer  in,
-                    AudioHandle::InterleavingOutputBuffer out,
-                    size_t                                size)
+void audio_callback(AudioHandle::InputBuffer  in,
+                    AudioHandle::OutputBuffer out,
+                    size_t                    size)
 {
-    using Patate = std::vector<std::complex<double>>;
-
-    Patate foo;
-    foo.reserve(size / 2);
-    for(size_t ii = 0; ii < size; ii += 2)
-        foo.emplace_back(in[ii]);
-
-    coucou::fast_fourier(foo.data(), foo.size());
-
-
     hw.ProcessAllControls();
 
     auto waveform = std::floor(knob_waveform.Process());
@@ -55,14 +45,38 @@ void audio_callback(AudioHandle::InterleavingInputBuffer  in,
         data.osc.SetWaveform(waveform);
 
     const auto master_volume = knob_volume.Process();
-    for(size_t ii = 0; ii < size; ii += 2)
+
+
+    using Patate = std::vector<std::complex<double>>;
+
+    Patate left_channel;
+    Patate right_channel;
+    left_channel.reserve(size);
+    right_channel.reserve(size);
+    for(size_t ii = 0; ii < size; ii++)
+    {
+        const std::complex<double> left  = in[0][ii];
+        const std::complex<double> right = in[1][ii];
+
+        left_channel.emplace_back(left);
+        right_channel.emplace_back(right);
+    }
+
+    coucou::fast_fourier(left_channel.data(), left_channel.size());
+    coucou::fast_fourier(left_channel.data(), left_channel.size());
+    // coucou::fast_fourier(foo.data(), foo.size());
+    // coucou::fast_fourier(foo.data(), foo.size());
+
+    auto left_iter  = std::cbegin(left_channel);
+    auto right_iter = std::cbegin(right_channel);
+    for(size_t ii = 0; ii < size; ii++)
     {
         float ss = 0;
         for(auto& [note, data] : note_to_osc_datas)
             ss += data.osc.Process();
         ss *= master_volume;
-        out[ii]     = in[ii] + ss;
-        out[ii + 1] = in[ii + 1] + ss;
+        out[0][ii] = (*left_iter++).real() + ss;
+        out[1][ii] = (*right_iter++).real() + ss;
     }
 }
 
