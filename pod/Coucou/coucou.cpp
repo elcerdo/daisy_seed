@@ -25,6 +25,7 @@ Patate left_channel;
 Patate right_channel;
 
 int32_t count_midi_clocks = 0;
+bool    midi_transport    = false;
 float   master_volume     = .5f;
 
 void audio_callback(daisy::AudioHandle::InputBuffer  in,
@@ -47,16 +48,14 @@ void audio_callback(daisy::AudioHandle::InputBuffer  in,
     // coucou::fast_fourier(foo.data(), foo.size());
     // coucou::fast_fourier(foo.data(), foo.size());
 
-    auto left_iter  = std::cbegin(left_channel);
-    auto right_iter = std::cbegin(right_channel);
     for(size_t ii = 0; ii < size; ii++)
     {
         float ss = 0;
         for(auto& [note, data] : note_to_osc_datas)
             ss += data.osc.Process();
         ss *= master_volume;
-        out[0][ii] = (*left_iter++).real() + ss;
-        out[1][ii] = (*right_iter++).real() + ss;
+        out[0][ii] = left_channel[ii].real() + ss;
+        out[1][ii] = right_channel[ii].real() + ss;
     }
 }
 
@@ -65,8 +64,8 @@ void midi_dump(const daisy::MidiEvent& event, daisy::DaisySeed& seed)
     using MesgType = daisy::MidiMessageType;
 
     std::string label    = "unknown";
-    uint8_t     note     = 0;
-    uint8_t     velocity = 0;
+    int32_t     note     = -1;
+    int32_t     velocity = -1;
     switch(event.type)
     {
         case MesgType::NoteOff:
@@ -85,7 +84,10 @@ void midi_dump(const daisy::MidiEvent& event, daisy::DaisySeed& seed)
         case MesgType::ChannelPressure: label = "channel_pressure"; break;
         case MesgType::PitchBend: label = "pitch_bend"; break;
         case MesgType::SystemCommon: label = "sys_common"; break;
-        case MesgType::SystemRealTime: label = "sys_rt"; break;
+        case MesgType::SystemRealTime:
+            label = "sys_rt";
+            note  = static_cast<uint8_t>(event.srt_type);
+            break;
         case MesgType::ChannelMode: label = "channel_mode"; break;
         default: break;
     }
@@ -112,8 +114,16 @@ void midi_callback(const daisy::MidiEvent& event,
             switch(event.srt_type)
             {
                 case RTType::TimingClock: count_midi_clocks++; break;
-                case RTType::Stop: count_midi_clocks = 0; break;
-                case RTType::Reset: count_midi_clocks = 0; break;
+                case RTType::Start: midi_transport = true; break;
+                case RTType::Continue: midi_transport = true; break;
+                case RTType::Stop:
+                    count_midi_clocks = 0;
+                    midi_transport    = false;
+                    break;
+                case RTType::Reset:
+                    count_midi_clocks = 0;
+                    midi_transport    = false;
+                    break;
                 default: break;
             }
         }
@@ -262,9 +272,14 @@ int main(void)
 
         // leds
 
-        const auto main_clock_color = top_now % 1000 < 100 ? 1.f : 0.f;
-        const auto midi_clock_color = count_midi_clocks % 24 == 0 ? 1.f : 0.f;
-        pod.led1.Set(main_clock_color, 0, midi_clock_color);
+        const auto main_led_on = top_now % 1000 < 100 ? 1.f : 0.f;
+        pod.seed.SetLed(main_led_on);
+
+        const auto midi_color = !midi_transport               ? 0.f
+                                : count_midi_clocks % 24 == 0 ? 0.f
+                                : count_midi_clocks % 24 < 13 ? 1.f
+                                                              : 0.f;
+        pod.led1.Set(0, 0, midi_color);
 
         auto note_colors = std::array<float, 3>{0, 0, 0};
         if(!note_to_osc_datas.empty())
