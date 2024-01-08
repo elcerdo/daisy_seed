@@ -17,30 +17,33 @@ struct OscData
 using NoteToOscDatas = std::map<uint8_t, OscData>;
 
 NoteToOscDatas note_to_osc_datas = {};
-size_t         count_midi_clocks = 0;
-float          master_volume     = .5f;
+int32_t        note_balance      = 0;
+
+using Patate = std::vector<std::complex<double>>;
+
+Patate left_channel;
+Patate right_channel;
+
+int32_t count_midi_clocks = 0;
+float   master_volume     = .5f;
 
 void audio_callback(daisy::AudioHandle::InputBuffer  in,
                     daisy::AudioHandle::OutputBuffer out,
                     size_t                           size)
 {
-    using Patate = std::vector<std::complex<double>>;
-
-    Patate left_channel;
-    Patate right_channel;
-    left_channel.reserve(size);
-    right_channel.reserve(size);
+    assert(left_channel.size() == size);
+    assert(right_channel.size() == size);
     for(size_t ii = 0; ii < size; ii++)
     {
         const std::complex<double> left  = in[0][ii];
         const std::complex<double> right = in[1][ii];
 
-        left_channel.emplace_back(left);
-        right_channel.emplace_back(right);
+        left_channel[ii]  = left;
+        right_channel[ii] = right;
     }
 
-    coucou::fast_fourier(left_channel.data(), left_channel.size());
-    coucou::fast_fourier(left_channel.data(), left_channel.size());
+    // coucou::fast_fourier(left_channel.data(), left_channel.size());
+    // coucou::fast_fourier(left_channel.data(), left_channel.size());
     // coucou::fast_fourier(foo.data(), foo.size());
     // coucou::fast_fourier(foo.data(), foo.size());
 
@@ -61,11 +64,21 @@ void midi_dump(const daisy::MidiEvent& event, daisy::DaisySeed& seed)
 {
     using MesgType = daisy::MidiMessageType;
 
-    std::string label = "unknown";
+    std::string label    = "unknown";
+    uint8_t     note     = 0;
+    uint8_t     velocity = 0;
     switch(event.type)
     {
-        case MesgType::NoteOff: label = "note_off"; break;
-        case MesgType::NoteOn: label = "note_on"; break;
+        case MesgType::NoteOff:
+            label    = "note_off";
+            note     = event.data[0];
+            velocity = event.data[1];
+            break;
+        case MesgType::NoteOn:
+            label    = "note_on";
+            note     = event.data[0];
+            velocity = event.data[1];
+            break;
         case MesgType::PolyphonicKeyPressure: label = "poly_pressure"; break;
         case MesgType::ControlChange: label = "control_change"; break;
         case MesgType::ProgramChange: label = "program_change"; break;
@@ -77,7 +90,12 @@ void midi_dump(const daisy::MidiEvent& event, daisy::DaisySeed& seed)
         default: break;
     }
 
-    seed.PrintLine("[midi] %s channel %d", label.c_str(), event.channel);
+    seed.PrintLine("[midi] %s channel %d note %d vel %d balance %d",
+                   label.c_str(),
+                   event.channel,
+                   note,
+                   velocity,
+                   note_balance);
 }
 
 void midi_callback(const daisy::MidiEvent& event,
@@ -123,6 +141,8 @@ void midi_callback(const daisy::MidiEvent& event,
             osc.SetFreq(daisysp::mtof(pp.note));
             osc.SetAmp(1); // pp.velocity
             // osc.SetAmp(std::max(pp.velocity / 127, .1f));
+
+            note_balance += 1;
         }
         break;
         case MesgType::NoteOff:
@@ -132,34 +152,40 @@ void midi_callback(const daisy::MidiEvent& event,
             auto iter_osc_data = note_to_osc_datas.find(pp.note);
             if(iter_osc_data != std::cend(note_to_osc_datas))
                 iter_osc_data = note_to_osc_datas.erase(iter_osc_data);
+
+            note_balance -= 1;
         }
         break;
         case MesgType::ChannelMode:
         {
             // const AllNotesOffEvent pp = event.AsAllNotesOff();
             note_to_osc_datas.clear();
+            note_balance = 0;
         }
         break;
         default: break;
     }
 }
 
+daisy::DaisyPod pod;
+
 int main(void)
 {
     using Curve = daisy::Parameter::Curve;
 
-    daisy::DaisyPod pod;
     pod.Init();
-
-    pod.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
-    daisy::System::Delay(100);
-    pod.seed.StartLog(true);
-    daisy::System::Delay(100);
-
-    pod.seed.PrintLine("[init] init");
-
     pod.SetAudioBlockSize(256); // number of samples handled per callback
     pod.SetAudioSampleRate(daisy::SaiHandle::Config::SampleRate::SAI_48KHZ);
+    pod.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
+    daisy::System::Delay(200);
+
+    pod.seed.StartLog(true);
+    daisy::System::Delay(200);
+
+    pod.seed.PrintLine("[main] init");
+
+    left_channel.resize(pod.AudioBlockSize());
+    right_channel.resize(pod.AudioBlockSize());
 
     daisy::Parameter knob_volume;
     daisy::Parameter knob_waveform;
@@ -170,7 +196,7 @@ int main(void)
     pod.StartAudio(audio_callback);
     pod.midi.StartReceive();
 
-    pod.seed.PrintLine("[init] main loop");
+    pod.seed.PrintLine("[main] loop");
 
     const auto audio_samplerate = pod.AudioSampleRate();
     while(true)
@@ -189,12 +215,29 @@ int main(void)
 
         master_volume = knob_volume.Process();
 
-        if(pod.button1.Pressed())
+        if(pod.button1.RisingEdge())
+        {
+            pod.seed.PrintLine("[main] clear");
             note_to_osc_datas.clear();
+        }
+
+        if(pod.button2.RisingEdge())
+        {
+            pod.seed.PrintLine("[main] num_oscs %d balance %d",
+                               note_to_osc_datas.size(),
+                               note_balance);
+            for(const auto& [note, data] : note_to_osc_datas)
+            {
+                const auto elapsed = top_now - data.top;
+                pod.seed.PrintLine("       ** note %d %dms ago", note, elapsed);
+            }
+        }
 
         // midi events
 
         pod.midi.Listen();
+        if(pod.midi.HasEvents())
+            pod.seed.PrintLine("[midi] *******");
         while(pod.midi.HasEvents())
         {
             const auto event = pod.midi.PopEvent();
