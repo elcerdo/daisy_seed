@@ -189,7 +189,7 @@ int main(void)
     pod.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
     daisy::System::Delay(200);
 
-    pod.seed.StartLog(true);
+    pod.seed.StartLog();
     daisy::System::Delay(200);
 
     pod.seed.PrintLine("[main] init");

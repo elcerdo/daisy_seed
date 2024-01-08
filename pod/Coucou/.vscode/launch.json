@@ -10,13 +10,13 @@
         "-d",
         "${workspaceRoot}"
       ],
-      "executable": "${workspaceRoot}/build/Coucou.elf",
+      "executable": "${workspaceRoot}/build/coucou.elf",
       "interface": "swd",
       "name": "Cortex Debug",
-      "openOCDLaunchCommands": [
-        "init",
-        "reset init"
-      ],
+      // "openOCDLaunchCommands": [
+      //   "init",
+      //   "reset init"
+      // ],
       "preLaunchTask": "build_all_debug",
       "preRestartCommands": [
         "load",
@@ -24,7 +24,7 @@
         "monitor reset"
       ],
       "request": "launch",
-      "runToMain": true,
+      "runToEntryPoint": "main",
       "servertype": "openocd",
       "showDevDebugOutput": true,
       "svdFile": "${workspaceRoot}/.vscode/STM32H750x.svd",
