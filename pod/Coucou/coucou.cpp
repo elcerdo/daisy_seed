@@ -8,25 +8,25 @@
 #include <vector>
 #include <array>
 
-using namespace daisy;
-using namespace daisysp;
+// using namespace daisy;
+// using namespace daisysp;
 
 struct OscData
 {
-    uint32_t   top;
-    Oscillator osc;
+    uint32_t            top;
+    daisysp::Oscillator osc;
 };
 
 using NoteToOscDatas = std::map<uint8_t, OscData>;
 
-DaisyPod       hardware;
-Parameter      knob_volume;
-Parameter      knob_waveform;
 NoteToOscDatas note_to_osc_datas;
 
-void audio_callback(AudioHandle::InputBuffer  in,
-                    AudioHandle::OutputBuffer out,
-                    size_t                    size)
+daisy::Parameter knob_volume;
+daisy::Parameter knob_waveform;
+
+void audio_callback(daisy::AudioHandle::InputBuffer  in,
+                    daisy::AudioHandle::OutputBuffer out,
+                    size_t                           size)
 {
     auto waveform = std::floor(knob_waveform.Process());
     assert(waveform >= 0);
@@ -69,25 +69,25 @@ void audio_callback(AudioHandle::InputBuffer  in,
     }
 }
 
-void midi_dump(const MidiEvent& evt)
+daisy::DaisyPod hardware;
+
+void midi_dump(const daisy::MidiEvent& evt)
 {
+    using MesgType = daisy::MidiMessageType;
+
     std::string label = "unknown";
     switch(evt.type)
     {
-        case MidiMessageType::NoteOff: label = "note_off"; break;
-        case MidiMessageType::NoteOn: label = "note_on"; break;
-        case MidiMessageType::PolyphonicKeyPressure:
-            label = "poly_pressure";
-            break;
-        case MidiMessageType::ControlChange: label = "control_change"; break;
-        case MidiMessageType::ProgramChange: label = "program_change"; break;
-        case MidiMessageType::ChannelPressure:
-            label = "channel_pressure";
-            break;
-        case MidiMessageType::PitchBend: label = "pitch_bend"; break;
-        case MidiMessageType::SystemCommon: label = "sys_common"; break;
-        case MidiMessageType::SystemRealTime: label = "sys_rt"; break;
-        case MidiMessageType::ChannelMode: label = "channel_mode"; break;
+        case MesgType::NoteOff: label = "note_off"; break;
+        case MesgType::NoteOn: label = "note_on"; break;
+        case MesgType::PolyphonicKeyPressure: label = "poly_pressure"; break;
+        case MesgType::ControlChange: label = "control_change"; break;
+        case MesgType::ProgramChange: label = "program_change"; break;
+        case MesgType::ChannelPressure: label = "channel_pressure"; break;
+        case MesgType::PitchBend: label = "pitch_bend"; break;
+        case MesgType::SystemCommon: label = "sys_common"; break;
+        case MesgType::SystemRealTime: label = "sys_rt"; break;
+        case MesgType::ChannelMode: label = "channel_mode"; break;
         default: break;
     }
 
@@ -96,28 +96,29 @@ void midi_dump(const MidiEvent& evt)
 
 size_t count_midi_clocks;
 
-void midi_callback(MidiEvent      evt,
-                   const float    samplerate,
-                   const uint32_t top_now)
+void midi_callback(const daisy::MidiEvent& evt,
+                   const float             samplerate,
+                   const uint32_t          top_now)
 {
+    using MesgType = daisy::MidiMessageType;
+    using RTType   = daisy::SystemRealTimeType;
+
     switch(evt.type)
     {
-        case MidiMessageType::SystemRealTime:
+        case MesgType::SystemRealTime:
         {
             switch(evt.srt_type)
             {
-                case SystemRealTimeType::TimingClock:
-                    count_midi_clocks += 1;
-                    break;
-                case SystemRealTimeType::Stop: count_midi_clocks = 0; break;
-                case SystemRealTimeType::Reset: count_midi_clocks = 0; break;
+                case RTType::TimingClock: count_midi_clocks++; break;
+                case RTType::Stop: count_midi_clocks = 0; break;
+                case RTType::Reset: count_midi_clocks = 0; break;
                 default: break;
             }
         }
         break;
-        case MidiMessageType::NoteOn:
+        case MesgType::NoteOn:
         {
-            const NoteOnEvent pp = evt.AsNoteOn();
+            const daisy::NoteOnEvent pp = evt.AsNoteOn();
 
             auto iter_osc_data = note_to_osc_datas.find(pp.note);
             if(iter_osc_data == std::cend(note_to_osc_datas))
@@ -135,21 +136,21 @@ void midi_callback(MidiEvent      evt,
             auto& osc = iter_osc_data->second.osc;
 
             osc.Reset();
-            osc.SetFreq(mtof(pp.note));
+            osc.SetFreq(daisysp::mtof(pp.note));
             osc.SetAmp(1); // pp.velocity
             // osc.SetAmp(std::max(pp.velocity / 127, .1f));
         }
         break;
-        case MidiMessageType::NoteOff:
+        case MesgType::NoteOff:
         {
-            const NoteOffEvent pp = evt.AsNoteOff();
+            const daisy::NoteOffEvent pp = evt.AsNoteOff();
 
             auto iter_osc_data = note_to_osc_datas.find(pp.note);
             if(iter_osc_data != std::cend(note_to_osc_datas))
                 iter_osc_data = note_to_osc_datas.erase(iter_osc_data);
         }
         break;
-        case MidiMessageType::ChannelMode:
+        case MesgType::ChannelMode:
         {
             // const AllNotesOffEvent pp = evt.AsAllNotesOff();
             note_to_osc_datas.clear();
@@ -161,26 +162,23 @@ void midi_callback(MidiEvent      evt,
 
 int main(void)
 {
+    using Curve = daisy::Parameter::Curve;
+
     auto& hw = hardware;
 
     hw.Init();
-    hw.seed.StartLog(true);
-
-    hw.seed.PrintLine("[init] init");
 
     hw.SetAudioBlockSize(256); // number of samples handled per callback
-    hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
-    hw.seed.usb_handle.Init(UsbHandle::FS_INTERNAL);
-    System::Delay(250);
+    hw.SetAudioSampleRate(daisy::SaiHandle::Config::SampleRate::SAI_48KHZ);
+    hw.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
+    daisy::System::Delay(100);
 
-
-    knob_volume.Init(hw.knob1, 0, 1, Parameter::LINEAR);
-    knob_waveform.Init(hw.knob2, 0, 8, Parameter::LINEAR);
+    knob_volume.Init(hw.knob1, 0, 1, Curve::LINEAR);
+    knob_waveform.Init(hw.knob2, 0, 8, Curve::LINEAR);
 
     count_midi_clocks = 0;
 
-    hw.seed.PrintLine("[init] starting");
-
+    hw.seed.StartLog(true);
     hw.StartAdc();
     hw.StartAudio(audio_callback);
     hw.midi.StartReceive();
@@ -189,8 +187,16 @@ int main(void)
 
     while(true)
     {
-        hw.ProcessAllControls();
         const auto top_now = hw.seed.system.GetNow();
+
+        // controls
+
+        hw.ProcessAllControls();
+
+        if(hw.button1.Pressed())
+            note_to_osc_datas.clear();
+
+        // midi events
 
         hw.midi.Listen();
         while(hw.midi.HasEvents())
@@ -199,6 +205,8 @@ int main(void)
             midi_dump(evt);
             midi_callback(evt, hw.AudioSampleRate(), top_now);
         }
+
+        // leds
 
         const auto main_clock_color = top_now % 1000 < 100 ? 1.f : 0.f;
         const auto midi_clock_color = count_midi_clocks % 24 == 0 ? 1.f : 0.f;
@@ -225,8 +233,5 @@ int main(void)
                     std::get<2>(note_colors));
 
         hw.UpdateLeds();
-
-        if(hw.button1.Pressed())
-            note_to_osc_datas.clear();
     }
 }
