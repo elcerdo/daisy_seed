@@ -47,6 +47,11 @@ void HandleMidiMessage(MidiEvent m)
             }
         }
         break;
+        case NoteOff:
+        {
+            osc.SetAmp(0);
+        }
+        break;
         case ControlChange:
         {
             ControlChangeEvent p = m.AsControlChange();
