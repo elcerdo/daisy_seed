@@ -4,40 +4,30 @@
 
 #include <array>
 #include <random>
-#include <chrono>
 #include <map>
 #include <vector>
+#include <array>
 
 using namespace daisy;
 using namespace daisysp;
 
-using Rng       = std::mt19937;
-using DistColor = std::uniform_real_distribution<float>;
-using Clock     = std::chrono::high_resolution_clock;
-
 struct OscData
 {
-    Clock::time_point top;
-    Oscillator        osc;
+    uint32_t   top;
+    Oscillator osc;
 };
 
 using NoteToOscDatas = std::map<uint8_t, OscData>;
 
-DaisyPod       hw;
+DaisyPod       hardware;
 Parameter      knob_volume;
 Parameter      knob_waveform;
 NoteToOscDatas note_to_osc_datas;
-
-Rng       rng;
-DistColor dist_color;
-size_t    count_midi_clocks;
 
 void audio_callback(AudioHandle::InputBuffer  in,
                     AudioHandle::OutputBuffer out,
                     size_t                    size)
 {
-    hw.ProcessAllControls();
-
     auto waveform = std::floor(knob_waveform.Process());
     assert(waveform >= 0);
     assert(waveform < 8);
@@ -45,7 +35,6 @@ void audio_callback(AudioHandle::InputBuffer  in,
         data.osc.SetWaveform(waveform);
 
     const auto master_volume = knob_volume.Process();
-
 
     using Patate = std::vector<std::complex<double>>;
 
@@ -80,10 +69,37 @@ void audio_callback(AudioHandle::InputBuffer  in,
     }
 }
 
-void midi_callback(MidiEvent evt)
+void midi_dump(const MidiEvent& evt)
 {
-    // hw.seed.PrintLine("[midi_callback]");
+    std::string label = "unknown";
+    switch(evt.type)
+    {
+        case MidiMessageType::NoteOff: label = "note_off"; break;
+        case MidiMessageType::NoteOn: label = "note_on"; break;
+        case MidiMessageType::PolyphonicKeyPressure:
+            label = "poly_pressure";
+            break;
+        case MidiMessageType::ControlChange: label = "control_change"; break;
+        case MidiMessageType::ProgramChange: label = "program_change"; break;
+        case MidiMessageType::ChannelPressure:
+            label = "channel_pressure";
+            break;
+        case MidiMessageType::PitchBend: label = "pitch_bend"; break;
+        case MidiMessageType::SystemCommon: label = "sys_common"; break;
+        case MidiMessageType::SystemRealTime: label = "sys_rt"; break;
+        case MidiMessageType::ChannelMode: label = "channel_mode"; break;
+        default: break;
+    }
 
+    hardware.seed.PrintLine("[midi] %s channel %d", label.c_str(), evt.channel);
+}
+
+size_t count_midi_clocks;
+
+void midi_callback(MidiEvent      evt,
+                   const float    samplerate,
+                   const uint32_t top_now)
+{
     switch(evt.type)
     {
         case MidiMessageType::SystemRealTime:
@@ -106,10 +122,8 @@ void midi_callback(MidiEvent evt)
             auto iter_osc_data = note_to_osc_datas.find(pp.note);
             if(iter_osc_data == std::cend(note_to_osc_datas))
             {
-                const auto samplerate = hw.AudioSampleRate();
-
                 OscData data;
-                data.top = Clock::now();
+                data.top = top_now;
                 data.osc.Init(samplerate);
 
                 bool is_inserted = false;
@@ -120,12 +134,10 @@ void midi_callback(MidiEvent evt)
             assert(iter_osc_data != std::cend(note_to_osc_datas));
             auto& osc = iter_osc_data->second.osc;
 
-            // osc.Reset();
-            // osc.SetAmp(0.0);
+            osc.Reset();
             osc.SetFreq(mtof(pp.note));
             osc.SetAmp(1); // pp.velocity
-            // osc.SetAmp(std::max(pp.velocity, .1f));
-            hw.led2.Set(dist_color(rng), dist_color(rng), dist_color(rng));
+            // osc.SetAmp(std::max(pp.velocity / 127, .1f));
         }
         break;
         case MidiMessageType::NoteOff:
@@ -135,8 +147,6 @@ void midi_callback(MidiEvent evt)
             auto iter_osc_data = note_to_osc_datas.find(pp.note);
             if(iter_osc_data != std::cend(note_to_osc_datas))
                 iter_osc_data = note_to_osc_datas.erase(iter_osc_data);
-
-            hw.led2.Set(0, 0, 0);
         }
         break;
         case MidiMessageType::ChannelMode:
@@ -151,37 +161,69 @@ void midi_callback(MidiEvent evt)
 
 int main(void)
 {
+    auto& hw = hardware;
+
     hw.Init();
+    hw.seed.StartLog(true);
+
+    hw.seed.PrintLine("[init] init");
+
     hw.SetAudioBlockSize(256); // number of samples handled per callback
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
     hw.seed.usb_handle.Init(UsbHandle::FS_INTERNAL);
     System::Delay(250);
 
-    // hw.seed.StartLog(true);
-    // hw.seed.PrintLine("coucou");
 
     knob_volume.Init(hw.knob1, 0, 1, Parameter::LINEAR);
     knob_waveform.Init(hw.knob2, 0, 8, Parameter::LINEAR);
 
-    rng               = Rng(0x12ab45cd);
-    dist_color        = std::uniform_real_distribution<float>(0, 1);
     count_midi_clocks = 0;
+
+    hw.seed.PrintLine("[init] starting");
 
     hw.StartAdc();
     hw.StartAudio(audio_callback);
     hw.midi.StartReceive();
 
-    const auto top_start = Clock::now();
+    hw.seed.PrintLine("[init] main loop");
+
     while(true)
     {
+        hw.ProcessAllControls();
+        const auto top_now = hw.seed.system.GetNow();
+
         hw.midi.Listen();
         while(hw.midi.HasEvents())
-            midi_callback(hw.midi.PopEvent());
+        {
+            const auto evt = hw.midi.PopEvent();
+            midi_dump(evt);
+            midi_callback(evt, hw.AudioSampleRate(), top_now);
+        }
 
-        const std::chrono::duration<float> dur = (Clock::now() - top_start);
+        const auto main_clock_color = top_now % 1000 < 100 ? 1.f : 0.f;
+        const auto midi_clock_color = count_midi_clocks % 24 == 0 ? 1.f : 0.f;
+        hw.led1.Set(main_clock_color, 0, midi_clock_color);
 
-        const auto green = dur.count() - std::floor(dur.count());
-        hw.led1.Set(0, green, count_midi_clocks % 24 == 0 ? 1 : 0);
+        auto note_colors = std::array<float, 3>{0, 0, 0};
+        if(!note_to_osc_datas.empty())
+        {
+            // clang-format off
+            constexpr std::hash<uint8_t> hasher;
+            size_t seed = 0x12ab45cd;
+            for (const auto& [note, data] : note_to_osc_datas)
+                seed ^= hasher(note) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            std::mt19937 rng(seed);
+            std::uniform_real_distribution<float> dist(0, 1);
+            // clang-format on
+
+            std::get<0>(note_colors) = dist(rng);
+            std::get<1>(note_colors) = dist(rng);
+            std::get<2>(note_colors) = dist(rng);
+        }
+        hw.led2.Set(std::get<0>(note_colors),
+                    std::get<1>(note_colors),
+                    std::get<2>(note_colors));
+
         hw.UpdateLeds();
 
         if(hw.button1.Pressed())
