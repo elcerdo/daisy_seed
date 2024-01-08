@@ -133,6 +133,7 @@ void midi_callback(const daisy::MidiEvent& event,
                 std::tie(iter_osc_data, is_inserted)
                     = note_to_osc_datas.emplace(pp.note, data);
                 assert(is_inserted);
+                note_balance += 1;
             }
             assert(iter_osc_data != std::cend(note_to_osc_datas));
             auto& osc = iter_osc_data->second.osc;
@@ -141,8 +142,6 @@ void midi_callback(const daisy::MidiEvent& event,
             osc.SetFreq(daisysp::mtof(pp.note));
             osc.SetAmp(1); // pp.velocity
             // osc.SetAmp(std::max(pp.velocity / 127, .1f));
-
-            note_balance += 1;
         }
         break;
         case MesgType::NoteOff:
@@ -151,9 +150,10 @@ void midi_callback(const daisy::MidiEvent& event,
 
             auto iter_osc_data = note_to_osc_datas.find(pp.note);
             if(iter_osc_data != std::cend(note_to_osc_datas))
+            {
                 iter_osc_data = note_to_osc_datas.erase(iter_osc_data);
-
-            note_balance -= 1;
+                note_balance -= 1;
+            }
         }
         break;
         case MesgType::ChannelMode:
@@ -219,6 +219,7 @@ int main(void)
         {
             pod.seed.PrintLine("[main] clear");
             note_to_osc_datas.clear();
+            note_balance = 0;
         }
 
         if(pod.button2.RisingEdge())
@@ -237,12 +238,26 @@ int main(void)
 
         pod.midi.Listen();
         if(pod.midi.HasEvents())
-            pod.seed.PrintLine("[midi] *******");
-        while(pod.midi.HasEvents())
         {
-            const auto event = pod.midi.PopEvent();
-            midi_dump(event, pod.seed);
-            midi_callback(event, audio_samplerate, top_now);
+            pod.seed.PrintLine("[midi] *******");
+
+            std::vector<daisy::MidiEvent> events;
+            while(pod.midi.HasEvents())
+            {
+                const auto event = pod.midi.PopEvent();
+                events.emplace_back(event);
+            }
+            std::sort(std::begin(events),
+                      std::end(events),
+                      [](const daisy::MidiEvent& aa,
+                         const daisy::MidiEvent& bb) -> bool
+                      { return aa.type < bb.type; });
+
+            for(const auto& event : events)
+            {
+                midi_dump(event, pod.seed);
+                midi_callback(event, audio_samplerate, top_now);
+            }
         }
 
         // leds
