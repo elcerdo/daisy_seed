@@ -61,8 +61,7 @@ void coucou::fast_fourier(std::complex<double>* x, double N)
     int n = N / 2;
 
     /* set primitive root of unity */
-    complex<double> wn = exp((M_TWOPI * 1i) / N);
-    complex<double> w  = 1;
+    // complex<double> w  = 1;
 
     /* move odd and evened indexed to each half
 	   of array x */
@@ -83,11 +82,8 @@ void coucou::fast_fourier(std::complex<double>* x, double N)
         even = x[k];
         odd  = x[k + n]; /* k + N/2 */
 
-        x[k]     = even + w * odd;
-        x[k + n] = even - w * odd;
-
-        /* multiply same as k+1 
-		   in exponent */
-        w = w * wn;
+        complex<double> w = exp(2 * M_PI * k * 1i / N);
+        x[k]              = even + w * odd;
+        x[k + n]          = even - w * odd;
     }
 }
