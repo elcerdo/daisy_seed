@@ -13,10 +13,10 @@
       "executable": "${workspaceRoot}/build/coucou.elf",
       "interface": "swd",
       "name": "Cortex Debug",
-      // "openOCDLaunchCommands": [
-      //   "init",
-      //   "reset init"
-      // ],
+      "openOCDLaunchCommands": [
+        "init",
+        "reset init"
+      ],
       "preLaunchTask": "build_all_debug",
       "preRestartCommands": [
         "load",

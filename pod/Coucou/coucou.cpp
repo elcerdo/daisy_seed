@@ -8,6 +8,8 @@
 #include <vector>
 #include <array>
 
+// #define WITH_MIDI_USB
+
 struct OscData
 {
     uint32_t            top;
@@ -27,6 +29,7 @@ Patate right_channel;
 int32_t count_midi_clocks = 0;
 bool    midi_transport    = false;
 float   master_volume     = .5f;
+bool    use_midi_usb      = false;
 
 void audio_callback(daisy::AudioHandle::InputBuffer  in,
                     daisy::AudioHandle::OutputBuffer out,
@@ -178,12 +181,19 @@ void midi_callback(const daisy::MidiEvent& event,
 }
 
 daisy::DaisyPod pod;
+#if defined(WITH_MIDI_USB)
+daisy::MidiUsbHandler midi_usb;
+#endif
 
 int main(void)
 {
     using Curve = daisy::Parameter::Curve;
 
     pod.Init();
+#if defined(WITH_MIDI_USB)
+    auto midi_usb_config = daisy::MidiUsbHandler::Config{};
+    midi_usb.Init(midi_usb_config);
+#endif
     pod.SetAudioBlockSize(256); // number of samples handled per callback
     pod.SetAudioSampleRate(daisy::SaiHandle::Config::SampleRate::SAI_48KHZ);
     pod.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
@@ -205,6 +215,9 @@ int main(void)
     pod.StartAdc();
     pod.StartAudio(audio_callback);
     pod.midi.StartReceive();
+#if defined(WITH_MIDI_USB)
+    midi_usb.StartReceive();
+#endif
 
     pod.seed.PrintLine("[main] loop");
 
@@ -224,6 +237,13 @@ int main(void)
             data.osc.SetWaveform(waveform);
 
         master_volume = knob_volume.Process();
+
+        if(pod.encoder.RisingEdge())
+        {
+            use_midi_usb ^= true;
+            pod.seed.PrintLine("[main] using %s midi",
+                               use_midi_usb ? "usb" : "trs");
+        }
 
         if(pod.button1.RisingEdge())
         {
@@ -249,12 +269,37 @@ int main(void)
         pod.midi.Listen();
         if(pod.midi.HasEvents())
         {
-            pod.seed.PrintLine("[midi] *******");
-
             std::vector<daisy::MidiEvent> events;
             while(pod.midi.HasEvents())
             {
                 const auto event = pod.midi.PopEvent();
+                events.emplace_back(event);
+            }
+
+            if(!use_midi_usb)
+            {
+                pod.seed.PrintLine("[midi] **** TRS ****");
+                std::sort(std::begin(events),
+                          std::end(events),
+                          [](const daisy::MidiEvent& aa,
+                             const daisy::MidiEvent& bb) -> bool
+                          { return aa.type < bb.type; });
+                for(const auto& event : events)
+                {
+                    midi_dump(event, pod.seed);
+                    midi_callback(event, audio_samplerate, top_now);
+                }
+            }
+        }
+
+#if defined(WITH_MIDI_USB)
+        midi_usb.Listen();
+        if(midi_usb.HasEvents())
+        {
+            std::vector<daisy::MidiEvent> events;
+            while(midi_usb.HasEvents())
+            {
+                const auto event = midi_usb.PopEvent();
                 events.emplace_back(event);
             }
             std::sort(std::begin(events),
@@ -263,12 +308,17 @@ int main(void)
                          const daisy::MidiEvent& bb) -> bool
                       { return aa.type < bb.type; });
 
-            for(const auto& event : events)
+            if(use_midi_usb)
             {
-                midi_dump(event, pod.seed);
-                midi_callback(event, audio_samplerate, top_now);
+                pod.seed.PrintLine("[midi] **** USB ****");
+                for(const auto& event : events)
+                {
+                    midi_dump(event, pod.seed);
+                    midi_callback(event, audio_samplerate, top_now);
+                }
             }
         }
+#endif
 
         // leds
 
