@@ -21,10 +21,12 @@ using NoteToOscDatas = std::map<uint8_t, OscData>;
 NoteToOscDatas note_to_osc_datas = {};
 int32_t        note_balance      = 0;
 
-using Patate = std::vector<std::complex<double>>;
+constexpr size_t audio_block_size = 256;
 
-Patate left_channel;
-Patate right_channel;
+using Patate = std::array<std::complex<double>, audio_block_size>;
+
+Patate DSY_SDRAM_BSS left_channel;
+Patate DSY_SDRAM_BSS right_channel;
 
 int32_t count_midi_clocks = 0;
 bool    midi_transport    = false;
@@ -194,7 +196,8 @@ int main(void)
     auto midi_usb_config = daisy::MidiUsbHandler::Config{};
     midi_usb.Init(midi_usb_config);
 #endif
-    pod.SetAudioBlockSize(256); // number of samples handled per callback
+    pod.SetAudioBlockSize(
+        audio_block_size); // number of samples handled per callback
     pod.SetAudioSampleRate(daisy::SaiHandle::Config::SampleRate::SAI_48KHZ);
     pod.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
     daisy::System::Delay(200);
@@ -203,9 +206,6 @@ int main(void)
     daisy::System::Delay(200);
 
     pod.seed.PrintLine("[main] init");
-
-    left_channel.resize(pod.AudioBlockSize());
-    right_channel.resize(pod.AudioBlockSize());
 
     daisy::Parameter knob_volume;
     daisy::Parameter knob_waveform;
