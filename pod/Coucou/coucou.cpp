@@ -155,10 +155,9 @@ void midi_callback(const daisy::MidiEvent& event,
             assert(iter_osc_data != std::cend(note_to_osc_datas));
             auto& osc = iter_osc_data->second.osc;
 
-            osc.Reset();
+            // osc.Reset();
             osc.SetFreq(daisysp::mtof(pp.note));
-            osc.SetAmp(1); // pp.velocity
-            // osc.SetAmp(std::max(pp.velocity / 127, .1f));
+            osc.SetAmp(std::max(pp.velocity / 127.f, .1f));
         }
         break;
         case MesgType::NoteOff:
@@ -392,7 +391,7 @@ int main(void)
         // display.DrawLine(0, 16, 128, 64, true);
         // display.DrawLine(0, 64, 128, 16, true);
 
-        uint_fast8_t hh = std::floor(63 - master_volume * (63 - 16));
+        const uint_fast8_t hh = std::floor(63 - master_volume * (63 - 16));
         display.DrawRect(0, 63, 6, hh, true, false);
 
         snprintf(format_buffer.data(),
@@ -403,12 +402,18 @@ int main(void)
         display.SetCursor(8, 16);
         display.WriteString(format_buffer.data(), Font_7x10, true);
 
+        const auto radius    = 16;
+        const auto angle     = M_PI * 2 * (count_midi_clocks % 24) / 24.f;
+        const auto center_xx = 128 - radius - 1;
+        const auto center_yy = 64 - radius - 1;
+        const auto hand_xx   = center_xx + (radius - 2) * sin(angle);
+        const auto hand_yy   = center_yy - (radius - 2) * cos(angle);
+        display.DrawCircle(center_xx, center_yy, radius, true);
+        display.DrawLine(center_xx, center_yy, hand_xx, hand_yy, true);
         display.Update();
 
         // pins
 
         pin.Toggle();
-
-        daisy::System::DelayUs(10);
     }
 }
