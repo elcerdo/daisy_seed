@@ -248,7 +248,7 @@ int main(void)
     pod.seed.PrintLine("[main] loop");
 
     const auto audio_samplerate = pod.AudioSampleRate();
-    while(true)
+        while(true)
     {
         const auto top_now = pod.seed.system.GetNow();
 
@@ -395,10 +395,10 @@ int main(void)
         display.DrawRect(0, 63, 6, hh, true, false);
 
         snprintf(format_buffer.data(),
-                 format_buffer.size(),
-                 "%02d %s",
-                 note_to_osc_datas.size(),
-                 waveform_names[waveform]);
+                    format_buffer.size(),
+                    "%02d %s",
+                    note_to_osc_datas.size(),
+                    waveform_names[waveform]);
         display.SetCursor(8, 16);
         display.WriteString(format_buffer.data(), Font_7x10, true);
 
@@ -412,8 +412,9 @@ int main(void)
         display.DrawLine(center_xx, center_yy, hand_xx, hand_yy, true);
         display.Update();
 
-        // pins
+        // delay
 
+        daisy::System::Delay(1);
         pin.Toggle();
     }
 }
