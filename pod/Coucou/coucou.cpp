@@ -230,8 +230,9 @@ int main(void)
         display.Init(config);
     }
 
+    daisy::System::Delay(100);
     pod.seed.StartLog();
-    daisy::System::Delay(200);
+    daisy::System::Delay(100);
 
     pod.seed.PrintLine("[main] init");
 
