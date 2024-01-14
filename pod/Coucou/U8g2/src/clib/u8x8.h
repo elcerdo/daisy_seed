@@ -164,10 +164,12 @@ uint8_t u8x8_pgm_read_esp(const uint8_t * addr);   /* u8x8_8x8.c */
 #  define U8X8_PROGMEM
 #endif
 
+// #include "daisy_pod.h"
 
+// #define U8X8_FONT_SECTION(name) (DSY_SDRAM_BSS)
 
 #ifndef U8X8_FONT_SECTION
-#  define U8X8_FONT_SECTION(name) 
+#  define U8X8_FONT_SECTION(name)
 #endif
 
 #ifndef u8x8_pgm_read
