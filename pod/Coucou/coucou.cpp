@@ -1,172 +1,16 @@
 #include "fft.h"
 
-#include <U8x8lib.h>
-
 #include "daisy_pod.h"
 #include "daisysp.h"
+
+#include "hid/disp/oled_display.h"
+#include "dev/oled_ssd130x.h"
+#include "util/oled_fonts.h"
 
 #include <array>
 #include <random>
 #include <map>
 #include <vector>
-#include <array>
-
-extern "C" uint8_t daisy_gpio_and_delay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, U8X8_UNUSED void *arg_ptr)
-{
-    assert(false);
-    // uint8_t i;
-    // switch(msg)
-    // {
-    //     case U8X8_MSG_GPIO_AND_DELAY_INIT:
-        
-    //     for( i = 0; i < U8X8_PIN_CNT; i++ )
-    //     if ( u8x8->pins[i] != U8X8_PIN_NONE )
-    //     {
-    //     if ( i < U8X8_PIN_OUTPUT_CNT )
-    //     {
-    //         pinMode(u8x8->pins[i], OUTPUT);
-    //     }
-    //     else
-    //     {
-    // #ifdef INPUT_PULLUP
-    //         pinMode(u8x8->pins[i], INPUT_PULLUP);
-    // #else
-    //         pinMode(u8x8->pins[i], OUTPUT);
-    //         digitalWrite(u8x8->pins[i], 1);
-    // #endif 
-    //     }
-    //     }
-        
-    //     break;
-
-    // #ifndef __AVR__	
-    //     /* this case is not compiled for any AVR, because AVR uC are so slow */
-    //     /* that this delay does not matter */
-    //     case U8X8_MSG_DELAY_NANO:
-    //     delayMicroseconds(arg_int==0?0:1);
-    //     break;
-    // #endif
-        
-    //     case U8X8_MSG_DELAY_10MICRO:
-    //     /* not used at the moment */
-    //     break;
-        
-    //     case U8X8_MSG_DELAY_100NANO:
-    //     /* not used at the moment */
-    //     break;
-    
-    //     case U8X8_MSG_DELAY_MILLI:
-    //     delay(arg_int);
-    //     break;
-    //     case U8X8_MSG_DELAY_I2C:
-    //     /* arg_int is 1 or 4: 100KHz (5us) or 400KHz (1.25us) */
-    //     delayMicroseconds(arg_int<=2?5:2);
-    //     break;
-    //     case U8X8_MSG_GPIO_I2C_CLOCK:
-    //     case U8X8_MSG_GPIO_I2C_DATA:
-    //     if ( arg_int == 0 )
-    //     {
-    //     pinMode(u8x8_GetPinValue(u8x8, msg), OUTPUT);
-    //     digitalWrite(u8x8_GetPinValue(u8x8, msg), 0);
-    //     }
-    //     else
-    //     {
-    // #ifdef INPUT_PULLUP
-    //     pinMode(u8x8_GetPinValue(u8x8, msg), INPUT_PULLUP);
-    // #else
-    //     pinMode(u8x8_GetPinValue(u8x8, msg), OUTPUT);
-    //     digitalWrite(u8x8_GetPinValue(u8x8, msg), 1);
-    // #endif 
-    //     }
-    //     break;
-    //     default:
-    //     if ( msg >= U8X8_MSG_GPIO(0) )
-    //     {
-    //     i = u8x8_GetPinValue(u8x8, msg);
-    //     if ( i != U8X8_PIN_NONE )
-    //     {
-    //     if ( u8x8_GetPinIndex(u8x8, msg) < U8X8_PIN_OUTPUT_CNT )
-    //     {
-    //         digitalWrite(i, arg_int);
-    //     }
-    //     else
-    //     {
-    //         if ( u8x8_GetPinIndex(u8x8, msg) == U8X8_PIN_OUTPUT_CNT )
-    //         {
-    //         // call yield() for the first pin only, u8x8 will always request all the pins, so this should be ok
-    //         yield();
-    //         }
-    //         u8x8_SetGPIOResult(u8x8, digitalRead(i) == 0 ? 0 : 1);
-    //     }
-    //     }
-    //     break;
-    //     }
-        
-    //     return 0;
-    // }
-    return 1;
-}
-
-extern "C" uint8_t daisy_hw_i2c(U8X8_UNUSED u8x8_t *u8x8, U8X8_UNUSED uint8_t msg, U8X8_UNUSED uint8_t arg_int, U8X8_UNUSED void *arg_ptr)
-{
-    assert(false);
-// #ifdef U8X8_HAVE_HW_I2C
-//   switch(msg)
-//   {
-//     case U8X8_MSG_BYTE_SEND:
-//       Wire.write((uint8_t *)arg_ptr, (int)arg_int);
-//       break;
-//     case U8X8_MSG_BYTE_INIT:
-//       if ( u8x8->bus_clock == 0 ) 	/* issue 769 */
-// 	u8x8->bus_clock = u8x8->display_info->i2c_bus_clock_100kHz * 100000UL;
-// #if defined(ESP8266) || defined(ARDUINO_ARCH_ESP8266) || defined(ESP_PLATFORM) || defined(ARDUINO_ARCH_ESP32)
-//       /* for ESP8266/ESP32, Wire.begin has two more arguments: clock and data */          
-//       if ( u8x8->pins[U8X8_PIN_I2C_CLOCK] != U8X8_PIN_NONE && u8x8->pins[U8X8_PIN_I2C_DATA] != U8X8_PIN_NONE )
-//       {
-// 	// second argument for the wire lib is the clock pin. In u8g2, the first argument of the  clock pin in the clock/data pair
-// 	Wire.begin((int)u8x8->pins[U8X8_PIN_I2C_DATA] , u8x8->pins[U8X8_PIN_I2C_CLOCK]);
-//       }
-//       else
-//       {
-// 	Wire.begin();
-//       }
-// #else
-//       Wire.begin();
-// #endif
-//       break;
-//     case U8X8_MSG_BYTE_SET_DC:
-//       break;
-//     case U8X8_MSG_BYTE_START_TRANSFER:
-// #if ARDUINO >= 10600
-//       /* not sure when the setClock function was introduced, but it is there since 1.6.0 */
-//       /* if there is any error with Wire.setClock() just remove this function call by */
-//       /* defining U8X8_DO_NOT_SET_WIRE_CLOCK */
-// #ifndef U8X8_DO_NOT_SET_WIRE_CLOCK
-//       Wire.setClock(u8x8->bus_clock);
-// #endif 
-// #endif
-//       Wire.beginTransmission(u8x8_GetI2CAddress(u8x8)>>1);
-//       break;
-//     case U8X8_MSG_BYTE_END_TRANSFER:
-//       Wire.endTransmission();
-//       break;
-//     default:
-//       return 0;
-//   }
-// #endif
-  return 1;
-}
-
-
-class Screen : public U8X8 {
-  public: Screen() : U8X8() {
-    u8x8_Setup(getU8x8(), u8x8_d_ssd1306_128x64_noname, u8x8_cad_ssd13xx_fast_i2c, daisy_hw_i2c, daisy_gpio_and_delay);
-    constexpr uint8_t reset = U8X8_PIN_NONE;
-    constexpr uint8_t clock = U8X8_PIN_NONE;
-    constexpr uint8_t data = U8X8_PIN_NONE;
-    u8x8_SetPin_HW_I2C(getU8x8(), reset, clock, data);
-  }
-};
 
 struct OscData
 {
@@ -340,16 +184,27 @@ void midi_callback(const daisy::MidiEvent& event,
     }
 }
 
+using Display = daisy::OledDisplay<daisy::SSD130xI2c128x64Driver>;
 
 daisy::DaisyPod pod;
+Display         display;
 daisy::GPIO     pin;
-
 #if defined(WITH_MIDI_USB)
 daisy::MidiUsbHandler midi;
 #endif
 
-Screen                screen;
-std::array<char, 256> format_buffer;
+static std::array<char, 256> DSY_SDRAM_BSS format_buffer;
+
+static std::array<const char*, 8> waveform_names{
+    "sin",
+    "tri",
+    "saw",
+    "ramp",
+    "square",
+    "ptri",
+    "psaw",
+    "psquare",
+};
 
 int main(void)
 {
@@ -368,10 +223,13 @@ int main(void)
     pod.SetAudioBlockSize(audio_block_size);
     pod.SetAudioSampleRate(daisy::SaiHandle::Config::SampleRate::SAI_48KHZ);
     // pod.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
-    pod.seed.StartLog();
     pin.Init(daisy::seed::D7, GPIO::Mode::OUTPUT, GPIO::Pull::NOPULL);
-    screen.begin();
-    screen.setPowerSave(0);
+    { // init display
+        auto config = Display::Config{};
+        display.Init(config);
+    }
+
+    pod.seed.StartLog();
     daisy::System::Delay(200);
 
     pod.seed.PrintLine("[main] init");
@@ -388,8 +246,6 @@ int main(void)
     midi_usb.StartReceive();
 #endif
 
-    // screen.Begin();
-
     pod.seed.PrintLine("[main] loop");
 
     const auto audio_samplerate = pod.AudioSampleRate();
@@ -401,7 +257,7 @@ int main(void)
 
         pod.ProcessAllControls();
 
-        auto waveform = std::floor(knob_waveform.Process());
+        size_t waveform = std::floor(knob_waveform.Process());
         assert(waveform >= 0);
         assert(waveform < 8);
         for(auto& [note, data] : note_to_osc_datas)
@@ -421,6 +277,7 @@ int main(void)
             pod.seed.PrintLine("[main] clear");
             note_to_osc_datas.clear();
             note_balance = 0;
+            display.Update();
         }
 
         if(pod.button2.RisingEdge())
@@ -524,25 +381,34 @@ int main(void)
 
         pod.UpdateLeds();
 
-        // screen
+        // display
 
-        screen.setFont(u8x8_font_8x13_1x2_f);
-        screen.setInverseFont(0);
-        screen.drawString(0, 0, "Hello World!");
-        screen.drawString(0, 0, R"(AbCd{}[]*-/|\)");
+        display.Fill(true);
 
-        screen.setFont(u8x8_font_pxplusibmcgathin_f);
+        display.SetCursor(0, 0);
+        display.WriteString("Coucou", Font_11x18, false);
+        display.DrawRect(0, 16, 128, 64, false, true);
+
+        // display.DrawLine(0, 16, 128, 64, true);
+        // display.DrawLine(0, 64, 128, 16, true);
+
+        uint_fast8_t hh = std::floor(63 - master_volume * (63 - 16));
+        display.DrawRect(0, 63, 6, hh, true, false);
+
         snprintf(format_buffer.data(),
                  format_buffer.size(),
-                 "foo %03d",
-                 note_to_osc_datas.size());
-        screen.setFont(u8x8_font_chroma48medium8_r);
-        screen.drawString(0, 6, format_buffer.data());
+                 "%02d %s",
+                 note_to_osc_datas.size(),
+                 waveform_names[waveform]);
+        display.SetCursor(8, 16);
+        display.WriteString(format_buffer.data(), Font_7x10, true);
+
+        display.Update();
 
         // pins
 
         pin.Toggle();
 
-        daisy::System::DelayUs(100);
+        daisy::System::DelayUs(10);
     }
 }
