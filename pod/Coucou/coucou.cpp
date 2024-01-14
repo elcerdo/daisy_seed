@@ -1,3 +1,6 @@
+#include "pvoc/phase_vocoder.h"
+#include "pvoc/parameters.h"
+
 #include "daisy_pod.h"
 #include "daisysp.h"
 
@@ -10,6 +13,8 @@
 #include <map>
 #include <vector>
 
+constexpr size_t audio_block_size = 256;
+
 struct OscData
 {
     uint32_t            top;
@@ -21,45 +26,42 @@ using NoteToOscDatas = std::map<uint8_t, OscData>;
 NoteToOscDatas note_to_osc_datas = {};
 int32_t        note_balance      = 0;
 
-constexpr size_t audio_block_size = 256;
+using FloatFrameArray = std::array<FloatFrame, audio_block_size>;
 
-using AudioArray = std::array<float, audio_block_size>;
+FloatFrameArray DSY_SDRAM_BSS buffer_fft;
 
-AudioArray DSY_SDRAM_BSS left_channel;
-AudioArray DSY_SDRAM_BSS right_channel;
+PhaseVocoder vocoder;
 
 int32_t count_midi_clocks = 0;
 bool    midi_transport    = false;
 float   master_volume     = .5f;
 bool    use_midi_usb      = false;
 
-void audio_callback(daisy::AudioHandle::InputBuffer  in,
-                    daisy::AudioHandle::OutputBuffer out,
-                    size_t                           size)
+void audio_callback(daisy::AudioHandle::InterleavingInputBuffer  in,
+                    daisy::AudioHandle::InterleavingOutputBuffer out,
+                    size_t                                       size)
 {
-    assert(left_channel.size() == size);
-    assert(right_channel.size() == size);
-    for(size_t ii = 0; ii < size; ii++)
+    assert(buffer_fft.size() * 2 == size);
+    for(size_t ii = 0; ii < size; ii += 2)
     {
-        const auto left  = in[0][ii];
-        const auto right = in[1][ii];
-        left_channel[ii]  = left;
-        right_channel[ii] = right;
+        buffer_fft[ii / 2].r = in[ii + 0];
+        buffer_fft[ii / 2].l = in[ii + 1];
     }
 
-    // coucou::fast_fourier(left_channel.data(), left_channel.size());
-    // coucou::fast_fourier(left_channel.data(), left_channel.size());
-    // coucou::fast_fourier(foo.data(), foo.size());
-    // coucou::fast_fourier(foo.data(), foo.size());
+    // Parameters params;
+    // vocoder.Process(params,
+    //                 reinterpret_cast<const FloatFrame*>(in),
+    //                 buffer_fft.data(),
+    //                 buffer_fft.size());
 
-    for(size_t ii = 0; ii < size; ii++)
+    for(size_t ii = 0; ii < size; ii += 2)
     {
         float ss = 0;
         for(auto& [note, data] : note_to_osc_datas)
             ss += data.osc.Process();
         ss *= master_volume;
-        out[0][ii] = left_channel[ii] + ss;
-        out[1][ii] = right_channel[ii] + ss;
+        out[ii + 0] = buffer_fft[ii / 2].l + ss;
+        out[ii + 1] = buffer_fft[ii / 2].r + ss;
     }
 }
 
@@ -218,8 +220,11 @@ int main(void)
 #endif
     pod.SetAudioBlockSize(audio_block_size);
     pod.SetAudioSampleRate(daisy::SaiHandle::Config::SampleRate::SAI_48KHZ);
+    const auto audio_samplerate = pod.AudioSampleRate();
+
     // pod.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
     pin.Init(daisy::seed::D7, GPIO::Mode::OUTPUT, GPIO::Pull::NOPULL);
+
     { // init display
         auto config = Display::Config{};
         display.Init(config);
@@ -229,6 +234,19 @@ int main(void)
     daisy::System::Delay(200);
 
     pod.seed.PrintLine("[main] init");
+
+    { // init vocoder
+        // void*  buffer[2];
+        // size_t buffer_size[2];
+        // vocoder.Init(buffer,
+        //              buffer_size,
+        //              lut_sine_window_4096,
+        //              4096,
+        //              2,
+        //              16,
+        //              audio_samplerate);
+        // vocoder.Buffer();
+    }
 
     daisy::Parameter knob_volume;
     daisy::Parameter knob_waveform;
@@ -244,8 +262,7 @@ int main(void)
 
     pod.seed.PrintLine("[main] loop");
 
-    const auto audio_samplerate = pod.AudioSampleRate();
-        while(true)
+    while(true)
     {
         const auto top_now = pod.seed.system.GetNow();
 
@@ -392,10 +409,10 @@ int main(void)
         display.DrawRect(0, 63, 6, hh, true, false);
 
         snprintf(format_buffer.data(),
-                    format_buffer.size(),
-                    "%02d %s",
-                    note_to_osc_datas.size(),
-                    waveform_names[waveform]);
+                 format_buffer.size(),
+                 "%02d %s",
+                 note_to_osc_datas.size(),
+                 waveform_names[waveform]);
         display.SetCursor(8, 16);
         display.WriteString(format_buffer.data(), Font_7x10, true);
 
