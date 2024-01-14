@@ -11,202 +11,162 @@
 #include <vector>
 #include <array>
 
-
-/*
-struct Screen
+extern "C" uint8_t daisy_gpio_and_delay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, U8X8_UNUSED void *arg_ptr)
 {
-    // using Display = U8X8_SSD1306_128X64_NONAME_HW_I2C;
-
-    static constexpr uint16_t address = 24;
-    static constexpr uint8_t  width   = 128;
-    static constexpr uint8_t  height  = 64;
-    static constexpr uint32_t timeout = 10;
-
-    daisy::I2CHandle handle;
-
-    void Init();
-    void Begin();
-    void Update();
-    void SetPower(const bool enable);
-
-    void HelloWorld();
-};
-
-void Screen::Init()
-{
-    using daisy::I2CHandle;
-
-    I2CHandle::Config config;
-    config.mode   = I2CHandle::Config::Mode::I2C_MASTER;
-    config.periph = I2CHandle::Config::Peripheral::I2C_1;
-    // config.speed          = I2CHandle::Config::Speed::I2C_100KHZ;
-    config.speed          = I2CHandle::Config::Speed::I2C_1MHZ;
-    config.pin_config.scl = {DSY_GPIOB, 8}; // D11
-    config.pin_config.sda = {DSY_GPIOB, 9}; // D12
-
-    [[maybe_unused]] const auto ret = handle.Init(config);
-    assert(ret == daisy::I2CHandle::Result::OK);
-}
-
-void Screen::Begin()
-{
-    const auto i2c_send = [this](uint8_t data)
-    {
-        const auto ret = handle.TransmitBlocking(address, &data, 1, timeout);
-        assert(ret == daisy::I2CHandle::Result::OK);
-    };
-
-    //     #if defined OUTPUT_OPEN_DRAIN
-    //         pinMode(sda_pin, OUTPUT_OPEN_DRAIN);
-    //         digitalWrite(sda_pin, HIGH);
-    //         pinMode(scl_pin, OUTPUT_OPEN_DRAIN);
-    //         digitalWrite(scl_pin, HIGH);
-    //     #else
-    //         pinMode(sda_pin, INPUT);
-    //         pinMode(scl_pin, INPUT);
-    //     #endif
-    //     if (reset_pin != NO_RESET_PIN)
-    //     {
-    //         pinMode(reset_pin, OUTPUT);
-    //         digitalWrite(reset_pin, LOW);
-    //         delay(10);
-    //         digitalWrite(reset_pin, HIGH);
-    //     }
-    //     delay(100);
-
-    // i2c_start();
-
-    // i2c_send(i2c_address << 1); // address + write
-    i2c_send(0x00); // command
-    i2c_send(0xAE); // display off
-    i2c_send(0xD5); // clock divider
-    i2c_send(0x80);
-    i2c_send(0xA8); // multiplex ratio
-    i2c_send(height - 1);
-    i2c_send(0xD3); // no display offset
-    i2c_send(0x00);
-    i2c_send(0x40); // start line address=0
-    i2c_send(0x8D); // enable charge pump
-    i2c_send(0x14);
-    i2c_send(0x20); // memory adressing mode=horizontal
-    i2c_send(0x00);
-    i2c_send(0xA1); // segment remapping mode
-    i2c_send(0xC8); // COM output scan direction
-
-    if(width == 128 && height == 32)
-    {
-        i2c_send(0xDA); // com pins hardware configuration
-        i2c_send(0x02);
-    }
-    else if(width == 128 && height == 64)
-    {
-        i2c_send(0xDA); // com pins hardware configuration
-        i2c_send(0x12);
-    }
-    else if(width == 96 && height == 16)
-    {
-        i2c_send(0xDA); // com pins hardware configuration
-        i2c_send(0x02);
-    }
-
-    i2c_send(0x81); // contrast control
-    i2c_send(0x80);
-    i2c_send(0xD9); // pre-charge period
-    i2c_send(0x22);
-    i2c_send(0xDB); // set vcomh deselect level
-    i2c_send(0x20);
-    i2c_send(0xA4); // output RAM to display
-    i2c_send(0xA6); // display mode A6=normal, A7=inverse
-    i2c_send(0x2E); // stop scrolling
-
-    // i2c_stop();
-
-    // daisy::System::Delay(100);
-
-    // Update();
-    SetPower(true);
-}
-
-
-void Screen::Update()
-{
-    SetPower(true);
-    // auto data = std::array<uint8_t, 2>{
-    //     0xff,
-    //     0,
-    // };
-
-    // uint16_t index = 0;
-    // for (uint_fast8_t page = 0; page < pages; page++)
+    assert(false);
+    // uint8_t i;
+    // switch(msg)
     // {
-    //     // Set memory address to fill
-    //     i2c_start();
-    //     i2c_send(i2c_address << 1); // address + write
-    //     i2c_send(0x00); // command
-    //     if (displayController == CTRL_SH1106)
+    //     case U8X8_MSG_GPIO_AND_DELAY_INIT:
+        
+    //     for( i = 0; i < U8X8_PIN_CNT; i++ )
+    //     if ( u8x8->pins[i] != U8X8_PIN_NONE )
     //     {
-    //         i2c_send(0xB0 + page); // set page
-    //         i2c_send(0x00); // lower columns address =0
-    //         i2c_send(0x10); // upper columns address =0
+    //     if ( i < U8X8_PIN_OUTPUT_CNT )
+    //     {
+    //         pinMode(u8x8->pins[i], OUTPUT);
     //     }
     //     else
     //     {
-    //         i2c_send(0xB0 + page); // set page
-    //         i2c_send(0x21); // column address
-    //         i2c_send(0x00); // first column =0
-    //         i2c_send(width - 1); // last column
+    // #ifdef INPUT_PULLUP
+    //         pinMode(u8x8->pins[i], INPUT_PULLUP);
+    // #else
+    //         pinMode(u8x8->pins[i], OUTPUT);
+    //         digitalWrite(u8x8->pins[i], 1);
+    // #endif 
     //     }
-    //     i2c_stop();
+    //     }
+        
+    //     break;
 
-    //     // send one page of buffer to the display
-    //     i2c_start();
-    //     i2c_send(i2c_address << 1); // address + write
-    //     i2c_send(0x40); // data
-    //     if(usingOffset){
-    //         i2c_send(0);
-    //         i2c_send(0);
-    //     }
-    //     for (uint_fast8_t column = 0; column < width; column++)
+    // #ifndef __AVR__	
+    //     /* this case is not compiled for any AVR, because AVR uC are so slow */
+    //     /* that this delay does not matter */
+    //     case U8X8_MSG_DELAY_NANO:
+    //     delayMicroseconds(arg_int==0?0:1);
+    //     break;
+    // #endif
+        
+    //     case U8X8_MSG_DELAY_10MICRO:
+    //     /* not used at the moment */
+    //     break;
+        
+    //     case U8X8_MSG_DELAY_100NANO:
+    //     /* not used at the moment */
+    //     break;
+    
+    //     case U8X8_MSG_DELAY_MILLI:
+    //     delay(arg_int);
+    //     break;
+    //     case U8X8_MSG_DELAY_I2C:
+    //     /* arg_int is 1 or 4: 100KHz (5us) or 400KHz (1.25us) */
+    //     delayMicroseconds(arg_int<=2?5:2);
+    //     break;
+    //     case U8X8_MSG_GPIO_I2C_CLOCK:
+    //     case U8X8_MSG_GPIO_I2C_DATA:
+    //     if ( arg_int == 0 )
     //     {
-    //         i2c_send(buffer[index++]);
+    //     pinMode(u8x8_GetPinValue(u8x8, msg), OUTPUT);
+    //     digitalWrite(u8x8_GetPinValue(u8x8, msg), 0);
     //     }
-    //     i2c_stop();
-    //     yield(); // to avoid that the watchdog triggers
+    //     else
+    //     {
+    // #ifdef INPUT_PULLUP
+    //     pinMode(u8x8_GetPinValue(u8x8, msg), INPUT_PULLUP);
+    // #else
+    //     pinMode(u8x8_GetPinValue(u8x8, msg), OUTPUT);
+    //     digitalWrite(u8x8_GetPinValue(u8x8, msg), 1);
+    // #endif 
+    //     }
+    //     break;
+    //     default:
+    //     if ( msg >= U8X8_MSG_GPIO(0) )
+    //     {
+    //     i = u8x8_GetPinValue(u8x8, msg);
+    //     if ( i != U8X8_PIN_NONE )
+    //     {
+    //     if ( u8x8_GetPinIndex(u8x8, msg) < U8X8_PIN_OUTPUT_CNT )
+    //     {
+    //         digitalWrite(i, arg_int);
+    //     }
+    //     else
+    //     {
+    //         if ( u8x8_GetPinIndex(u8x8, msg) == U8X8_PIN_OUTPUT_CNT )
+    //         {
+    //         // call yield() for the first pin only, u8x8 will always request all the pins, so this should be ok
+    //         yield();
+    //         }
+    //         u8x8_SetGPIOResult(u8x8, digitalRead(i) == 0 ? 0 : 1);
+    //     }
+    //     }
+    //     break;
+    //     }
+        
+    //     return 0;
     // }
+    return 1;
 }
 
-
-#define U8X8_C(c0) (U8X8_MSG_CAD_SEND_CMD), (c0)
-#define U8X8_A(a0) (U8X8_MSG_CAD_SEND_ARG), (a0)
-#define U8X8_CA(c0, a0) \
-    (U8X8_MSG_CAD_SEND_CMD), (c0), (U8X8_MSG_CAD_SEND_ARG), (a0)
-
-#define U8X8_START_TRANSFER() (U8X8_MSG_CAD_START_TRANSFER)
-#define U8X8_END_TRANSFER() (U8X8_MSG_CAD_END_TRANSFER)
-// #define U8X8_END() (0xff)
-
-void Screen::SetPower(const bool enable)
+extern "C" uint8_t daisy_hw_i2c(U8X8_UNUSED u8x8_t *u8x8, U8X8_UNUSED uint8_t msg, U8X8_UNUSED uint8_t arg_int, U8X8_UNUSED void *arg_ptr)
 {
-    static const std::array<uint8_t, 4> mesg_on = {
-        U8X8_START_TRANSFER(), // enable chip, delay is part of the transfer start
-        U8X8_C(0x0ae),         // display off
-        U8X8_END_TRANSFER(),   // disable chip
-        // U8X8_END(),
-    };
-    static const std::array<uint8_t, 4> mesg_off = {
-        U8X8_START_TRANSFER(), // enable chip, delay is part of the transfer start
-        U8X8_C(0x0af),         // display on
-        U8X8_END_TRANSFER(),   // disable chip
-        // U8X8_END(),
-    };
-
-    const auto& mesg = enable ? mesg_on : mesg_off;
-
-    [[maybe_unused]] const auto ret = handle.TransmitBlocking(
-        address, const_cast<uint8_t*>(mesg.data()), mesg.size(), timeout);
-    assert(ret == daisy::I2CHandle::Result::OK);
+    assert(false);
+// #ifdef U8X8_HAVE_HW_I2C
+//   switch(msg)
+//   {
+//     case U8X8_MSG_BYTE_SEND:
+//       Wire.write((uint8_t *)arg_ptr, (int)arg_int);
+//       break;
+//     case U8X8_MSG_BYTE_INIT:
+//       if ( u8x8->bus_clock == 0 ) 	/* issue 769 */
+// 	u8x8->bus_clock = u8x8->display_info->i2c_bus_clock_100kHz * 100000UL;
+// #if defined(ESP8266) || defined(ARDUINO_ARCH_ESP8266) || defined(ESP_PLATFORM) || defined(ARDUINO_ARCH_ESP32)
+//       /* for ESP8266/ESP32, Wire.begin has two more arguments: clock and data */          
+//       if ( u8x8->pins[U8X8_PIN_I2C_CLOCK] != U8X8_PIN_NONE && u8x8->pins[U8X8_PIN_I2C_DATA] != U8X8_PIN_NONE )
+//       {
+// 	// second argument for the wire lib is the clock pin. In u8g2, the first argument of the  clock pin in the clock/data pair
+// 	Wire.begin((int)u8x8->pins[U8X8_PIN_I2C_DATA] , u8x8->pins[U8X8_PIN_I2C_CLOCK]);
+//       }
+//       else
+//       {
+// 	Wire.begin();
+//       }
+// #else
+//       Wire.begin();
+// #endif
+//       break;
+//     case U8X8_MSG_BYTE_SET_DC:
+//       break;
+//     case U8X8_MSG_BYTE_START_TRANSFER:
+// #if ARDUINO >= 10600
+//       /* not sure when the setClock function was introduced, but it is there since 1.6.0 */
+//       /* if there is any error with Wire.setClock() just remove this function call by */
+//       /* defining U8X8_DO_NOT_SET_WIRE_CLOCK */
+// #ifndef U8X8_DO_NOT_SET_WIRE_CLOCK
+//       Wire.setClock(u8x8->bus_clock);
+// #endif 
+// #endif
+//       Wire.beginTransmission(u8x8_GetI2CAddress(u8x8)>>1);
+//       break;
+//     case U8X8_MSG_BYTE_END_TRANSFER:
+//       Wire.endTransmission();
+//       break;
+//     default:
+//       return 0;
+//   }
+// #endif
+  return 1;
 }
-*/
+
+
+class Screen : public U8X8 {
+  public: Screen() : U8X8() {
+    u8x8_Setup(getU8x8(), u8x8_d_ssd1306_128x64_noname, u8x8_cad_ssd13xx_fast_i2c, daisy_hw_i2c, daisy_gpio_and_delay);
+    constexpr uint8_t reset = U8X8_PIN_NONE;
+    constexpr uint8_t clock = U8X8_PIN_NONE;
+    constexpr uint8_t data = U8X8_PIN_NONE;
+    u8x8_SetPin_HW_I2C(getU8x8(), reset, clock, data);
+  }
+};
 
 struct OscData
 {
@@ -380,7 +340,6 @@ void midi_callback(const daisy::MidiEvent& event,
     }
 }
 
-using Screen = U8X8_SSD1306_128X64_NONAME_HW_I2C;
 
 daisy::DaisyPod pod;
 daisy::GPIO     pin;
