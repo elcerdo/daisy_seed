@@ -1,5 +1,3 @@
-#include "fft.h"
-
 #include "daisy_pod.h"
 #include "daisysp.h"
 
@@ -25,10 +23,10 @@ int32_t        note_balance      = 0;
 
 constexpr size_t audio_block_size = 256;
 
-using Patate = std::array<std::complex<double>, audio_block_size>;
+using AudioArray = std::array<float, audio_block_size>;
 
-Patate DSY_SDRAM_BSS left_channel;
-Patate DSY_SDRAM_BSS right_channel;
+AudioArray DSY_SDRAM_BSS left_channel;
+AudioArray DSY_SDRAM_BSS right_channel;
 
 int32_t count_midi_clocks = 0;
 bool    midi_transport    = false;
@@ -43,9 +41,8 @@ void audio_callback(daisy::AudioHandle::InputBuffer  in,
     assert(right_channel.size() == size);
     for(size_t ii = 0; ii < size; ii++)
     {
-        const std::complex<double> left  = in[0][ii];
-        const std::complex<double> right = in[1][ii];
-
+        const auto left  = in[0][ii];
+        const auto right = in[1][ii];
         left_channel[ii]  = left;
         right_channel[ii] = right;
     }
@@ -61,8 +58,8 @@ void audio_callback(daisy::AudioHandle::InputBuffer  in,
         for(auto& [note, data] : note_to_osc_datas)
             ss += data.osc.Process();
         ss *= master_volume;
-        out[0][ii] = left_channel[ii].real() + ss;
-        out[1][ii] = right_channel[ii].real() + ss;
+        out[0][ii] = left_channel[ii] + ss;
+        out[1][ii] = right_channel[ii] + ss;
     }
 }
 
