@@ -7,8 +7,9 @@ LIBDAISY_DIR = ../../libDaisy
 DAISYSP_DIR = ../../DaisySP
 
 # Flags
-OPT = -Os -O2
-C_DEFS = -DNDEBUG
+OPT = -Os -O2 -Wall
+# C_DEFS = -DNDEBUG
+# LDFLAGS += -u _printf_float
 
 # Sources
 CPP_SOURCES = coucou.cpp
