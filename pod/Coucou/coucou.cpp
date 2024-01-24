@@ -237,6 +237,8 @@ daisy::MidiUsbHandler midi_usb;
 Display display;
 
 static std::array<char, 256> DSY_SDRAM_BSS format_buffer;
+
+bool update_display = true;
 #endif
 
 static std::list<float> average_loads;
@@ -350,12 +352,17 @@ int main(void)
 
             master_volume = knob_volume.Process();
 
-            // if(pod.encoder.RisingEdge())
-            // {
-            //     use_midi_usb ^= true;
-            //     pod.seed.PrintLine("[main] using %s midi",
-            //                        use_midi_usb ? "usb" : "trs");
-            // }
+#if defined(WITH_DISPLAY)
+            if(pod.encoder.RisingEdge())
+            {
+                update_display ^= true;
+                if(!update_display)
+                {
+                    display.Fill(false);
+                    display.Update();
+                }
+            }
+#endif
 
             if(pod.button1.RisingEdge())
             {
@@ -479,6 +486,7 @@ int main(void)
         }
 
 #if defined(WITH_DISPLAY)
+        if(update_display)
         { // display
             display.Fill(true);
 
