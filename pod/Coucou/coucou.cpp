@@ -1,8 +1,15 @@
+
+// clang-format off
+#include "begin_ignore_warnings.h"
+
 #include "pvoc/phase_vocoder.h"
 #include "pvoc/parameters.h"
 
 #include "daisy_pod.h"
 #include "daisysp.h"
+
+#include "end_ignore_warnings.h"
+// clang-format on
 
 #include "hid/disp/oled_display.h"
 #include "dev/oled_ssd130x.h"
@@ -19,13 +26,16 @@ constexpr size_t audio_block_size = 32;
 // #define WITH_MIDI_USB
 #define WITH_DISPLAY
 
+daisy::DaisyPod pod;
+
 struct OscData
 {
-    uint32_t            top_on;
-    uint32_t            top_off;
     daisysp::Oscillator osc;
-    daisysp::Adsr       env;
     bool                gate;
+    float               top_on;
+    float               top_off;
+    // daisysp::Adsr       env;
+    // daisysp::AdEnv      env;
 };
 
 using NoteToOscDatas = std::map<uint8_t, OscData>;
@@ -44,11 +54,12 @@ daisy::CpuLoadMeter meter;
 int32_t count_midi_clocks = 0;
 bool    midi_transport    = false;
 uint8_t master_waveform   = 0;
-float   master_volume     = .5f;
-float   master_attack     = .5f;
-float   master_decay      = .5f;
-float   master_sustain    = .5f;
-float   master_release    = .5f;
+
+float master_volume  = .5f;
+float master_attack  = .5f;
+float master_decay   = .5f;
+float master_sustain = .5f;
+float master_release = .5f;
 
 void audio_callback(daisy::AudioHandle::InterleavingInputBuffer  in,
                     daisy::AudioHandle::InterleavingOutputBuffer out,
@@ -69,14 +80,25 @@ void audio_callback(daisy::AudioHandle::InterleavingInputBuffer  in,
     //                 buffer_fft.data(),
     //                 buffer_fft.size());
 
+    float      top_now = pod.seed.system.GetNow();
+    const auto dt      = 1 / pod.AudioSampleRate();
+
     for(size_t ii = 0; ii < size; ii += 2)
     {
         float ss = 0;
         for(auto& [note, data] : note_to_osc_datas)
-            ss += data.osc.Process() * data.env.Process(data.gate);
+        {
+            // const auto volume = data.env.Process(data.gate);
+            const auto  elapsed = (top_now - data.top_off);
+            const float volume
+                = !data.gate && elapsed > master_release ? .5 : 1;
+            ss += data.osc.Process() * volume;
+        }
         ss *= master_volume;
         out[ii + 0] = buffer_fft[ii / 2].l + ss;
         out[ii + 1] = buffer_fft[ii / 2].r + ss;
+
+        top_now += dt;
     }
 
     meter.OnBlockEnd();
@@ -129,7 +151,6 @@ void midi_dump(const daisy::MidiEvent& event, daisy::DaisySeed& seed)
 
 void midi_callback(const daisy::MidiEvent& event,
                    const float             sample_rate,
-                   const size_t            block_size,
                    const uint32_t          top_now)
 {
     using MesgType = daisy::MidiMessageType;
@@ -166,11 +187,8 @@ void midi_callback(const daisy::MidiEvent& event,
             if(iter_osc_data == std::cend(note_to_osc_datas))
             {
                 OscData data;
-                data.top_on  = top_now;
-                data.top_off = 0;
                 data.osc.Init(sample_rate);
-                data.env.Init(sample_rate, block_size);
-                data.gate = true;
+                // data.env.Init(sample_rate);
 
                 bool is_inserted = false;
                 std::tie(iter_osc_data, is_inserted)
@@ -180,10 +198,13 @@ void midi_callback(const daisy::MidiEvent& event,
             assert(iter_osc_data != std::cend(note_to_osc_datas));
             auto& data = iter_osc_data->second;
 
-            // data.osc.Reset();
+            data.osc.Reset();
             data.osc.SetFreq(daisysp::mtof(pp.note));
             data.osc.SetAmp(std::max(pp.velocity / 127.f, .1f));
-            data.gate = true;
+            // data.env.Retrigger(true);
+            data.top_on  = top_now;
+            data.top_off = 0;
+            data.gate    = true;
         }
         break;
         case MesgType::NoteOff:
@@ -196,8 +217,8 @@ void midi_callback(const daisy::MidiEvent& event,
             if(iter_osc_data != std::cend(note_to_osc_datas))
             {
                 auto& data   = iter_osc_data->second;
-                data.gate    = false;
                 data.top_off = top_now;
+                data.gate    = false;
             }
         }
         break;
@@ -217,7 +238,7 @@ void midi_callback(const daisy::MidiEvent& event,
                 case 53: master_attack = pp.value / 127.f; break;
                 case 54: master_decay = pp.value / 127.f; break;
                 case 55: master_sustain = pp.value / 127.f; break;
-                case 43: master_release = pp.value / 127.f; break;
+                case 43: master_release = 4 * pp.value / 127.f; break;
             }
         }
         default: break;
@@ -226,8 +247,7 @@ void midi_callback(const daisy::MidiEvent& event,
 
 using Display = daisy::OledDisplay<daisy::SSD130xI2c128x64Driver>;
 
-daisy::DaisyPod pod;
-daisy::GPIO     pin;
+daisy::GPIO pin;
 
 #if defined(WITH_MIDI_USB)
 daisy::MidiUsbHandler midi_usb;
@@ -263,8 +283,8 @@ int main(void)
     pod.Init();
     pod.SetAudioBlockSize(audio_block_size);
     pod.SetAudioSampleRate(daisy::SaiHandle::Config::SampleRate::SAI_48KHZ);
-    const auto sample_rate = pod.AudioSampleRate();
-    const auto block_size  = pod.AudioBlockSize();
+    const float  sample_rate = pod.AudioSampleRate();
+    const size_t block_size  = pod.AudioBlockSize();
 
     // pod.seed.usb_handle.Init(daisy::UsbHandle::FS_INTERNAL);
 
@@ -335,7 +355,7 @@ int main(void)
             {
                 const auto gate    = iter_name_data->second.gate;
                 const auto elapsed = top_now - iter_name_data->second.top_off;
-                if(!gate && elapsed > 1000)
+                if(!gate && elapsed > master_release)
                 {
                     iter_name_data = note_to_osc_datas.erase(iter_name_data);
                     continue;
@@ -343,10 +363,10 @@ int main(void)
                 assert(iter_name_data != std::end(note_to_osc_datas));
                 auto& data = iter_name_data->second;
                 data.osc.SetWaveform(master_waveform);
-                data.env.SetAttackTime(master_attack * 2);
-                data.env.SetDecayTime(master_decay * 2);
-                data.env.SetSustainLevel(master_sustain);
-                data.env.SetReleaseTime(master_release * 10);
+                // data.env.SetAttackTime(master_attack);
+                // data.env.SetDecayTime(master_decay);
+                // data.env.SetSustainLevel(master_sustain);
+                // data.env.SetReleaseTime(master_release);
                 iter_name_data++;
             }
 
@@ -409,7 +429,7 @@ int main(void)
             for(const auto& event : events)
             {
                 midi_dump(event, pod.seed);
-                midi_callback(event, sample_rate, block_size, top_now);
+                midi_callback(event, sample_rate, top_now);
             }
         }
 
@@ -434,7 +454,7 @@ int main(void)
             for(const auto& event : events)
             {
                 midi_dump(event, pod.seed);
-                midi_callback(event, sample_rate, block_size, top_now);
+                midi_callback(event, sample_rate, top_now);
             }
         }
 #endif
