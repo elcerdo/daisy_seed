@@ -7,4 +7,4 @@
 	url = https://github.com/pichenettes/stmlib
 [submodule "libDaisy"]
 	path = libDaisy
-	url = https://github.com/elcerdo/daisy_seed.git
+	url = https://github.com/elcerdo/daisy_lib.git
