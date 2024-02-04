@@ -243,16 +243,18 @@ bool update_display = true;
 
 static std::list<float> average_loads;
 
-
-static const std::array<const char*, 8> waveform_names{
+static const std::array<const char*, 4> waveform_names{
     "sin",
     "tri",
     "saw",
-    "ramp",
     "square",
-    "ptri",
-    "psaw",
-    "psquare",
+};
+
+static const std::array<uint8_t, 4> waveform_waves{
+    Oscillator::WAVE_SIN,
+    Oscillator::WAVE_TRI,
+    Oscillator::WAVE_POLYBLEP_SAW,
+    Oscillator::WAVE_POLYBLEP_SQUARE,
 };
 
 int main(void)
@@ -309,7 +311,7 @@ int main(void)
     daisy::Parameter knob_volume;
     daisy::Parameter knob_waveform;
     knob_volume.Init(pod.knob1, 0, 1, Curve::LINEAR);
-    knob_waveform.Init(pod.knob2, 0, 8, Curve::LINEAR);
+    knob_waveform.Init(pod.knob2, 0, 4, Curve::LINEAR);
 
     pod.StartAdc();
     pod.StartAudio(audio_callback);
@@ -327,9 +329,11 @@ int main(void)
         { // controls
             pod.ProcessAllControls();
 
-            master_waveform = std::round(knob_waveform.Process());
+            master_waveform = std::floor(knob_waveform.Process());
+            master_waveform %= waveform_names.size();
             assert(master_waveform >= 0);
-            assert(master_waveform < 8);
+            assert(master_waveform < waveform_names.size());
+            assert(master_waveform < waveform_waves.size());
             auto iter_name_data = std::begin(note_to_osc_datas);
             while(iter_name_data != std::end(note_to_osc_datas))
             {
@@ -342,7 +346,7 @@ int main(void)
                 }
                 assert(iter_name_data != std::end(note_to_osc_datas));
                 auto& data = iter_name_data->second;
-                data.osc.SetWaveform(master_waveform);
+                data.osc.SetWaveform(waveform_waves[master_waveform]);
                 data.env.SetAttackTime(master_attack * 2);
                 data.env.SetDecayTime(master_decay * 2);
                 data.env.SetSustainLevel(master_sustain);
@@ -401,11 +405,11 @@ int main(void)
             }
 
             pod.seed.PrintLine("[midi] **** TRS ****");
-            std::sort(std::begin(events),
-                      std::end(events),
-                      [](const daisy::MidiEvent& aa,
-                         const daisy::MidiEvent& bb) -> bool
-                      { return aa.type < bb.type; });
+            // std::sort(std::begin(events),
+            //           std::end(events),
+            //           [](const daisy::MidiEvent& aa,
+            //              const daisy::MidiEvent& bb) -> bool
+            //           { return aa.type < bb.type; });
             for(const auto& event : events)
             {
                 midi_dump(event, pod.seed);
@@ -424,11 +428,11 @@ int main(void)
                 const auto event = midi_usb.PopEvent();
                 events.emplace_back(event);
             }
-            std::sort(std::begin(events),
-                      std::end(events),
-                      [](const daisy::MidiEvent& aa,
-                         const daisy::MidiEvent& bb) -> bool
-                      { return aa.type < bb.type; });
+            // std::sort(std::begin(events),
+            //           std::end(events),
+            //           [](const daisy::MidiEvent& aa,
+            //              const daisy::MidiEvent& bb) -> bool
+            //           { return aa.type < bb.type; });
 
             pod.seed.PrintLine("[midi] **** USB ****");
             for(const auto& event : events)
