@@ -7,7 +7,7 @@ LIBDAISY_DIR = ../../libDaisy
 DAISYSP_DIR = ../../DaisySP
 
 # Flags
-OPT = -Os -O2 -Wall
+OPT = -Os -O2 -Wall -Wextra
 # C_DEFS = -DNDEBUG
 # LDFLAGS += -u _printf_float
 
