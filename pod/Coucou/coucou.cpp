@@ -321,6 +321,8 @@ int main(void)
     { // init display
         auto config = Display::Config{};
         display.Init(config);
+        display.Fill(false);
+        display.Update();
     }
 #endif
 
